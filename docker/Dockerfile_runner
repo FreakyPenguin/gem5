@@ -1,0 +1,24 @@
+FROM debian:stable-slim
+RUN \
+  apt-get update && \
+  apt-get install -y \
+    gdb \
+    libgoogle-perftools4 \
+    libprotobuf10 \
+    libpython2.7 \
+    python-protobuf \
+    zlib1g \
+    && \
+  rm -rf \
+    /var/lib/apt/lists/* \
+    /usr/share/doc/* \
+    /usr/share/groff/* \
+    /usr/share/info/* \
+    /usr/share/linda/* \
+    /usr/share/lintian/* \
+    /usr/share/locale/* \
+    /usr/share/man/*
+RUN \
+  groupadd -r -g 1000 user && \
+  useradd --no-log-init -r -u 1000 -g user user
+USER user

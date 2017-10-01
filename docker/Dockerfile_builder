@@ -1,0 +1,31 @@
+FROM debian:stable-slim
+RUN \
+  apt-get update && \
+  apt-get install -y \
+    automake \
+    build-essential \
+    git \
+    libgoogle-perftools-dev \
+    libprotobuf-dev \
+    m4 \
+    protobuf-compiler \
+    python-dev \
+    python-protobuf \
+    scons \
+    swig \
+    zlib1g-dev \
+    && \
+  rm -rf \
+    /var/lib/apt/lists/* \
+    /usr/share/doc/* \
+    /usr/share/groff/* \
+    /usr/share/info/* \
+    /usr/share/linda/* \
+    /usr/share/lintian/* \
+    /usr/share/locale/* \
+    /usr/share/man/*
+
+RUN \
+  groupadd -r -g 1000 user && \
+  useradd --no-log-init -r -u 1000 -g user user
+USER user
