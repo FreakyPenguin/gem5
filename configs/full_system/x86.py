@@ -30,8 +30,18 @@
 import m5
 from m5.objects import *
 
+class ExtendedPc(Pc):
+    ethernet = FlexNIC(pci_bus=0, pci_dev=2, pci_func=0,
+                InterruptLine=15, InterruptPin=1,
+                BAR0 = 0xC0000000)
+
+    def attachIO(self, bus, dma_ports = []):
+        super(ExtendedPc, self).attachIO(bus, dma_ports)
+        self.ethernet.pio = bus.master
+        self.ethernet.dma = bus.slave
+
 def init_fs(system, membus):
-    system.pc = Pc()
+    system.pc = ExtendedPc()
 
     # Constants similar to x86_traits.hh
     IO_address_space_base = 0x8000000000000000
@@ -84,7 +94,7 @@ def init_fs(system, membus):
                         mshrs = 20,
                         size = '1kB',
                         tgts_per_mshr = 12,
-                        addr_ranges = system.mem_ranges)
+                        addr_ranges = [system.mem_ranges[0]])
     system.iocache.cpu_side = system.iobus.master
     system.iocache.mem_side = system.membus.slave
 
@@ -122,6 +132,15 @@ def init_fs(system, membus):
     connect_busses = X86IntelMPBusHierarchy(bus_id=1,
             subtractive_decode=True, parent_bus=0)
     ext_entries.append(connect_busses)
+    pci_dev2_inta = X86IntelMPIOIntAssignment(
+            interrupt_type = 'INT',
+            polarity = 'ConformPolarity',
+            trigger = 'ConformTrigger',
+            source_bus_id = 0,
+            source_bus_irq = 0 + (2 << 2),
+            dest_io_apic_id = io_apic.id,
+            dest_io_apic_intin = 17)
+    base_entries.append(pci_dev2_inta)
     pci_dev4_inta = X86IntelMPIOIntAssignment(
             interrupt_type = 'INT',
             polarity = 'ConformPolarity',

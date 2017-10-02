@@ -51,7 +51,7 @@ class MySystem(LinuxX86System):
         # to account for this I/O gap. For simplicity, this is omitted.
         mem_size = '512MB'
         self.mem_ranges = [AddrRange(mem_size),
-                           AddrRange(0xC0000000, size=0x100000), # For I/0
+                           AddrRange(0xC0000000, size=0x1000000), # For I/0
                            ]
 
         # Create the main memory bus
@@ -74,14 +74,14 @@ class MySystem(LinuxX86System):
         # Options specified on the kernel command line
         boot_options = ['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923',
                         'root=/dev/hda1', 'init=/sbin/myinit',
-                        'no_timer_check']
+                        'no_timer_check', 'lapic_timer_freq=1876750']
         self.boot_osflags = ' '.join(boot_options)
 
         # Replace these paths with the path to your disk images.
         # The first disk is the root disk. The second could be used for swap
         # or anything else.
         # Disks from http://www.m5sim.org/dist/current/x86/x86-system.tar.bz2
-        self.setDiskImage('/gem5/configs/full_system/debian-test.img')
+        self.setDiskImage('/gem5/configs/full_system/debian-test.img', '/gem5/data.tar')
 
         # Create the CPU for our system.
         self.createCPU()
@@ -106,14 +106,15 @@ class MySystem(LinuxX86System):
         self.cpu = AtomicSimpleCPU()
         self.mem_mode = 'atomic'
 
-    def setDiskImage(self, img_path):
+    def setDiskImage(self, img_path, img2_path):
         """ Set the disk image
             @param img_path path on the host to the image file for the disk
         """
         # Can have up to two master disk images.
         # This can be enabled with up to 4 images if using master-slave pairs
         disk0 = CowDisk(img_path)
-        self.pc.south_bridge.ide.disks = [disk0]
+        disk1 = CowDisk(img2_path)
+        self.pc.south_bridge.ide.disks = [disk0, disk1]
 
     def createCacheHierarchy(self):
         """ Create a simple cache heirarchy with the caches from part1 """

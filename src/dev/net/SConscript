@@ -84,6 +84,7 @@ DebugFlag('DistEthernetCmd')
 Source('i8254xGBe.cc')
 Source('ns_gige.cc')
 Source('sinic.cc')
+Source('flexnic.cc')
 
 
 

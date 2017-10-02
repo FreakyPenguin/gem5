@@ -274,3 +274,40 @@ class Sinic(EtherDevBase):
     BAR0Size = '64kB'
 
 
+class FlexNIC(EtherDevBase):
+    type = 'FlexNIC'
+    cxx_class = 'FlexNIC::Device'
+    cxx_header = "dev/net/flexnic.hh"
+
+    rx_max_copy = Param.MemorySize('1514B', "rx max copy")
+    tx_max_copy = Param.MemorySize('16kB', "tx max copy")
+    rx_max_intr = Param.UInt32(10, "max rx packets per interrupt")
+    rx_fifo_threshold = Param.MemorySize('384kB', "rx fifo high threshold")
+    rx_fifo_low_mark = Param.MemorySize('128kB', "rx fifo low threshold")
+    tx_fifo_high_mark = Param.MemorySize('384kB', "tx fifo high threshold")
+    tx_fifo_threshold = Param.MemorySize('128kB', "tx fifo low threshold")
+    virtual_count = Param.UInt32(1, "Virtualized SINIC")
+    zero_copy_size = Param.UInt32(64, "Bytes to copy if below threshold")
+    zero_copy_threshold = Param.UInt32(256,
+        "Only zero copy above this threshold")
+    zero_copy = Param.Bool(False, "Zero copy receive")
+    delay_copy = Param.Bool(False, "Delayed copy transmit")
+    virtual_addr = Param.Bool(False, "Virtual addressing")
+
+    VendorID = 0x4242
+    DeviceID = 0x4242
+    Status = 0x0290
+    SubClassCode = 0x00
+    ClassCode = 0x02
+    ProgIF = 0x00
+    BAR0 = 0x00000000
+    BAR1 = 0x00000000
+    BAR2 = 0x00000000
+    BAR3 = 0x00000000
+    BAR4 = 0x00000000
+    BAR5 = 0x00000000
+    MaximumLatency = 0x34
+    MinimumGrant = 0xb0
+    InterruptLine = 0x1e
+    InterruptPin = 0x01
+    BAR0Size = '32MB'
