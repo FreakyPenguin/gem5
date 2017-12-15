@@ -81,7 +81,8 @@ class MySystem(LinuxX86System):
         # The first disk is the root disk. The second could be used for swap
         # or anything else.
         # Disks from http://www.m5sim.org/dist/current/x86/x86-system.tar.bz2
-        self.setDiskImage('/gem5/configs/full_system/debian-test.img', '/gem5/data.tar')
+        self.setDiskImage('/gem5/configs/full_system/debian-test.img',
+                '/gem5/software/data.tar')
 
         # Create the CPU for our system.
         self.createCPU()
