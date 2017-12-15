@@ -279,20 +279,14 @@ class FlexNIC(EtherDevBase):
     cxx_class = 'FlexNIC::Device'
     cxx_header = "dev/net/flexnic.hh"
 
-    rx_max_copy = Param.MemorySize('1514B', "rx max copy")
-    tx_max_copy = Param.MemorySize('16kB', "tx max copy")
-    rx_max_intr = Param.UInt32(10, "max rx packets per interrupt")
-    rx_fifo_threshold = Param.MemorySize('384kB', "rx fifo high threshold")
-    rx_fifo_low_mark = Param.MemorySize('128kB', "rx fifo low threshold")
-    tx_fifo_high_mark = Param.MemorySize('384kB', "tx fifo high threshold")
-    tx_fifo_threshold = Param.MemorySize('128kB', "tx fifo low threshold")
-    virtual_count = Param.UInt32(1, "Virtualized SINIC")
-    zero_copy_size = Param.UInt32(64, "Bytes to copy if below threshold")
-    zero_copy_threshold = Param.UInt32(256,
-        "Only zero copy above this threshold")
-    zero_copy = Param.Bool(False, "Zero copy receive")
-    delay_copy = Param.Bool(False, "Delayed copy transmit")
-    virtual_addr = Param.Bool(False, "Virtual addressing")
+    doorbell_num = Param.UInt16(32, "Number of doorbells")
+    internal_memory = Param.MemorySize('1MB', "Internal NIC memory size")
+
+    pio_doorbell_delay = Param.Latency('1us', "Transmit Delay")
+    pio_regread_delay = Param.Latency('1us', "Register Read Delay")
+    pio_regwrite_delay = Param.Latency('1us', "Register Write Delay")
+    pio_memread_delay = Param.Latency('1us', "Internal Memory Read Delay")
+    pio_memwrite_delay = Param.Latency('1us', "Internal Memory Write Delay")
 
     VendorID = 0x4242
     DeviceID = 0x4242

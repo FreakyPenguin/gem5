@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2005 The Regents of The University of Michigan
+ * Copyright (c) 2017 The Regents of The University of Michigan
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,6 +29,7 @@
  */
 
 #include "dev/net/flexnic.hh"
+#include "dev/net/flexnicreg.hh"
 
 #include <deque>
 #include <limits>
@@ -57,21 +58,31 @@ namespace FlexNIC {
 // Sinic PCI Device
 //
 Device::Device(const Params *p)
-    : EtherDevBase(p)
+    : EtherDevBase(p), interface(0), doorbellsNum(p->doorbell_num),
+      doorbellsOff(0x1000),
+      internalMemOff(0x1000 * (1 + p->doorbell_num)),
+      internalMemSize(p->internal_memory),
+      internalMem(new uint8_t[p->internal_memory]),
+      pioDoorbellDelay(p->pio_doorbell_delay),
+      pioRegReadDelay(p->pio_regread_delay),
+      pioRegWriteDelay(p->pio_regwrite_delay),
+      pioMemReadDelay(p->pio_memread_delay),
+      pioMemWriteDelay(p->pio_memwrite_delay)
 {
     interface = new Interface(name() + ".int0", this);
     //reset();
-
 }
 
 Device::~Device()
-{}
+{
+  delete[] internalMem;
+}
 
 
 EtherInt*
 Device::getEthPort(const std::string &if_name, int idx)
 {
-    if (if_name == name() + ".int0") {
+    if (if_name == "interface") {
         if (interface->getPeer())
             panic("interface already connected to\n");
 
@@ -80,6 +91,12 @@ Device::getEthPort(const std::string &if_name, int idx)
     return NULL;
 }
 
+void
+Device::doorbellWrite(uint16_t dbIdx, uint64_t val)
+{
+    DPRINTF(Ethernet, "flexnic: Doorbell write (idx=%x, val=%llx)\n", dbIdx,
+        val);
+}
 
 /**
  * I/O read of device register
@@ -87,70 +104,82 @@ Device::getEthPort(const std::string &if_name, int idx)
 Tick
 Device::read(PacketPtr pkt)
 {
-    DPRINTF(Ethernet, "Receiving read(abs=%x, sz=%x, rel=%x)\n", pkt->getAddr(),
-        pkt->getSize(), pkt->getAddr() - BARAddrs[0]);
-#if 0
-    assert(config.command & PCI_CMD_MSE);
-    assert(pkt->getAddr() >= BARAddrs[0] && pkt->getSize() < BARSize[0]);
+    Addr off = pkt->getAddr() - BARAddrs[0];
+    unsigned sz = pkt->getSize();
+    Tick delay;
 
-    ContextID cpu = pkt->req->contextId();
-    Addr daddr = pkt->getAddr() - BARAddrs[0];
-    Addr index = daddr >> Regs::VirtualShift;
-    Addr raddr = daddr & Regs::VirtualMask;
+    DPRINTF(Ethernet, "flexnic: Receiving read(abs=%x, sz=%x, rel=%x)\n",
+        pkt->getAddr(), sz, off);
 
-    if (!regValid(raddr))
-        panic("invalid register: cpu=%d vnic=%d da=%#x pa=%#x size=%d",
-              cpu, index, daddr, pkt->getAddr(), pkt->getSize());
-
-    const Regs::Info &info = regInfo(raddr);
-    if (!info.read)
-        panic("read %s (write only): "
-              "cpu=%d vnic=%d da=%#x pa=%#x size=%d",
-              info.name, cpu, index, daddr, pkt->getAddr(), pkt->getSize());
-
-        panic("read %s (invalid size): "
-              "cpu=%d vnic=%d da=%#x pa=%#x size=%d",
-              info.name, cpu, index, daddr, pkt->getAddr(), pkt->getSize());
-
-    prepareRead(cpu, index);
-
-    uint64_t value M5_VAR_USED = 0;
-    if (pkt->getSize() == 4) {
-        uint32_t reg = regData32(raddr);
-        pkt->set(reg);
-        value = reg;
+    // catch unaligned reads
+    if (off % sz != 0) {
+      warn("flexnic: unaligned read (abs=%x, sz=%x, rel=%x)\n", pkt->getAddr(),
+          sz, off);
+      pkt->setBadAddress();
+      return 1;
     }
 
-    if (pkt->getSize() == 8) {
-        uint64_t reg = regData64(raddr);
-        pkt->set(reg);
-        value = reg;
+    // check bad sizes
+    if (sz != 1 && sz != 2 && sz != 4 && sz != 8) {
+      warn("flexnic: bad read size (abs=%x, sz=%x, rel=%x)\n", pkt->getAddr(),
+          sz, off);
+      pkt->setBadAddress();
+      return 1;
     }
 
-    DPRINTF(EthernetPIO,
-            "read %s: cpu=%d vnic=%d da=%#x pa=%#x size=%d val=%#x\n",
-            info.name, cpu, index, daddr, pkt->getAddr(), pkt->getSize(), value);
 
-    // reading the interrupt status register has the side effect of
-    // clearing it
-    if (raddr == Regs::IntrStatus)
-        devIntrClear();
+    if (off < doorbellsOff) {
+      // register read
+      if (sz != 4) {
+        warn("flexnic: register size must be 4 bytes (abs=%x, sz=%x, rel=%x)\n",
+            pkt->getAddr(), sz, off);
+        pkt->setBadAddress();
+        return 1;
+      }
 
-    return pioDelay;
-#endif
+      uint32_t val;
+      switch (off) {
+        case Regs::DoorbellsNum: val = doorbellsNum; break;
+        case Regs::DoorbellsOffset: val = doorbellsOff; break;
+        case Regs::IntMemSize: val = internalMemSize; break;
+        case Regs::IntMemOffset: val = internalMemOff; break;
+        case Regs::PlAllocRx: val = plAllocRx; break;
+        case Regs::PlAllocDb: val = plAllocDb; break;
 
-    switch (pkt->getSize()) {
-      case 1: pkt->set((uint8_t) 0); break;
-      case 2: pkt->set((uint16_t) 0); break;
-      case 4: pkt->set((uint32_t) 0); break;
-      case 8: pkt->set((uint64_t) 0); break;
-      default:
-        panic("read: invalid size: %d\n", pkt->getSize());
+        default:
+          warn("flexnic: invalid register read (abs=%x, sz=%x, "
+              "rel=%x)\n", pkt->getAddr(), sz, off);
+          pkt->setBadAddress();
+          return 1;
+      }
+
+      pkt->set(val);
+      delay = pioRegReadDelay;
+    } else if (off < internalMemOff) {
+      // doorbell read
+      warn("flexnic: doorbells must not be read\n");
+      pkt->setBadAddress();
+      return 1;
+    } else if (off < internalMemOff + internalMemSize) {
+      // internal memory read
+      Addr memOff = off - internalMemOff;
+      switch (pkt->getSize()) {
+        case 1: pkt->set(*(uint8_t *) (internalMem + memOff)); break;
+        case 2: pkt->set(*(uint16_t *) (internalMem + memOff)); break;
+        case 4: pkt->set(*(uint32_t *) (internalMem + memOff)); break;
+        case 8: pkt->set(*(uint64_t *) (internalMem + memOff)); break;
+        default:
+          panic("flexnic: invalid memory read size: %d\n", pkt->getSize());
+      }
+
+      delay = pioMemReadDelay;
+    } else {
+      panic("flexnic: pio read offset out of range: off=%x internal_mem_end=%x",
+          off, internalMemOff + internalMemSize);
     }
-
     pkt->makeAtomicResponse();
 
-    return 0;
+    return delay;
 }
 
 /**
@@ -158,6 +187,119 @@ Device::read(PacketPtr pkt)
  */
 Tick
 Device::write(PacketPtr pkt)
+{
+    Addr off = pkt->getAddr() - BARAddrs[0];
+    unsigned sz = pkt->getSize();
+    Tick delay;
+
+    DPRINTF(Ethernet, "flexnic: Receiving write(abs=%x, sz=%x, rel=%x)\n",
+        pkt->getAddr(), sz, off);
+
+    // catch unaligned reads
+    if (off % sz != 0) {
+      warn("flexnic: unaligned write (abs=%x, sz=%x, rel=%x)\n", pkt->getAddr(),
+          sz, off);
+      pkt->setBadAddress();
+      return 1;
+    }
+
+    // check bad sizes
+    if (sz != 1 && sz != 2 && sz != 4 && sz != 8) {
+      warn("flexnic: bad write size (abs=%x, sz=%x, rel=%x)\n", pkt->getAddr(),
+          sz, off);
+      pkt->setBadAddress();
+      return 1;
+    }
+
+
+    if (off < doorbellsOff) {
+      // register write
+      if (sz != 4) {
+        warn("flexnic: register write size must be 4 bytes (abs=%x, sz=%x, "
+            "rel=%x)\n", pkt->getAddr(), sz, off);
+        pkt->setBadAddress();
+        return 1;
+      }
+
+      uint32_t val = pkt->get<uint32_t>();
+      switch (off) {
+        case Regs::PlAllocRx: plAllocRx = val; break;
+        case Regs::PlAllocDb: plAllocDb = val; break;
+
+        case Regs::DoorbellsNum: /* FALLTHROUGH */
+        case Regs::DoorbellsOffset: /* FALLTHROUGH */
+        case Regs::IntMemSize: /* FALLTHROUGH */
+        case Regs::IntMemOffset: /* FALLTHROUGH */
+          warn("flexnic: write to read-only register (abs=%x, sz=%x, "
+              "rel=%x)\n", pkt->getAddr(), sz, off);
+          pkt->setBadAddress();
+          return 1;
+
+        default:
+          warn("flexnic: invalid register write (abs=%x, sz=%x, "
+              "rel=%x)\n", pkt->getAddr(), sz, off);
+          pkt->setBadAddress();
+          return 1;
+      }
+
+      pkt->set(val);
+      delay = pioRegWriteDelay;
+    } else if (off < internalMemOff) {
+      // doorbell write
+      Addr dbOff = off - doorbellsOff;
+      if (dbOff % 0x1000 != 0) {
+        warn("flexnic: doorbell writes must be aligned to beginning of doorbell"
+            " (abs=%x, sz=%x, rel=%x)\n", pkt->getAddr(), sz, off);
+        pkt->setBadAddress();
+        return 1;
+      }
+
+      uint32_t dbIdx = dbOff / 0x1000;
+      uint64_t val;
+      switch (pkt->getSize()) {
+        case 1: val = pkt->get<uint8_t>(); break;
+        case 2: val = pkt->get<uint16_t>(); break;
+        case 4: val = pkt->get<uint32_t>(); break;
+        case 8: val = pkt->get<uint64_t>(); break;
+
+        default:
+          panic("doorbell write: invalid size: %d\n", pkt->getSize());
+      }
+
+      doorbellWrite(dbIdx, val);
+      delay = pioDoorbellDelay;
+    } else if (off < internalMemOff + internalMemSize) {
+      // internal memory write
+      Addr memOff = off - internalMemOff;
+      switch (pkt->getSize()) {
+        case 1:
+          *(uint8_t *) (internalMem + memOff) = pkt->get<uint8_t>();
+          break;
+        case 2:
+          *(uint16_t *) (internalMem + memOff) = pkt->get<uint16_t>();
+          break;
+        case 4:
+          *(uint32_t *) (internalMem + memOff) = pkt->get<uint32_t>();
+          break;
+        case 8:
+          *(uint64_t *) (internalMem + memOff) = pkt->get<uint64_t>();
+          break;
+
+        default:
+          panic("write: invalid size: %d\n", pkt->getSize());
+      }
+
+      delay = pioMemWriteDelay;
+    } else {
+      panic("pio read offset out of range: off=%x internal_mem_end=%x",
+          off, internalMemOff + internalMemSize);
+    }
+    pkt->makeAtomicResponse();
+
+    return delay;
+}
+
+#if 0
 {
     DPRINTF(Ethernet, "Receiving write(abs=%x, sz=%x, rel=%x)\n", pkt->getAddr(),
         pkt->getSize(), pkt->getAddr() - BARAddrs[0]);
@@ -304,6 +446,7 @@ Device::write(PacketPtr pkt)
 */
     return 0;
 }
+#endif
 
 bool
 Device::recvPacket(EthPacketPtr packet)

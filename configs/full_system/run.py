@@ -54,6 +54,9 @@ if __name__ == "__m5_main__":
     # set up the root SimObject and start the simulation
     root = Root(full_system = True, system = system)
 
+    root.ethertap = EtherTap()
+    root.ethertap.tap = Parent.system.pc.ethernet.interface
+
     # instantiate all of the objects we've created above
     m5.instantiate()
 

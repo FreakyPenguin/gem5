@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2005 The Regents of The University of Michigan
+ * Copyright (c) 2017 The Regents of The University of Michigan
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,6 +42,21 @@
 #include "params/FlexNIC.hh"
 #include "sim/eventq.hh"
 
+/*
+ * Memory layout for BAR0:
+ *  - 0: Global registers
+ *    - 0x000 4B RO: number of doorbells
+ *    - 0x004 4B RO: doorbell offset
+ *    - 0x008 4B RO: size of internal memory
+ *    - 0x00c 4B RO: internal memory offset
+ *    - 0x010 4B RW: pipeline allocation mask RX
+ *    - 0x014 4B RW: pipeline allocation mask DB
+ *  - 4KB + i * 4KB: Doorbells
+ *    - Writes are only supported to the base address of the doorbell, in
+ *      sizes: 1, 2, 4, 8, 16, 32, 64B
+ *  - 4KB * (NUM_DOORBELLS + 1): Internal memory
+ */
+
 namespace FlexNIC {
 
 class Interface;
@@ -61,6 +76,22 @@ class Device : public EtherDevBase
 /**
  * Memory Interface
  */
+  protected:
+    uint16_t doorbellsNum;
+    uint32_t doorbellsOff;
+    uint32_t internalMemOff;
+    uint32_t internalMemSize;
+    uint8_t *internalMem;
+    uint8_t plAllocRx;
+    uint8_t plAllocDb;
+
+    Tick pioDoorbellDelay;
+    Tick pioRegReadDelay;
+    Tick pioRegWriteDelay;
+    Tick pioMemReadDelay;
+    Tick pioMemWriteDelay;
+
+    void doorbellWrite(uint16_t dbIdx, uint64_t val);
   public:
     Tick read(PacketPtr pkt) override;
     Tick write(PacketPtr pkt) override;
