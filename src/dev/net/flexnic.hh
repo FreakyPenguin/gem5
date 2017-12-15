@@ -61,6 +61,8 @@ namespace FlexNIC {
 
 class Interface;
 
+typedef void (*PipelineFun)(void *packet, void *metadata);
+
 class Device : public EtherDevBase
 {
 /**
@@ -77,6 +79,13 @@ class Device : public EtherDevBase
  * Memory Interface
  */
   protected:
+    std::string pcfgPath;
+    void *pcfgHandle;
+    PipelineFun pcfgFunRx;
+    PipelineFun pcfgFunTx;
+    PipelineFun pcfgFunDb;
+    PipelineFun pcfgFunDma;
+
     uint16_t doorbellsNum;
     uint32_t doorbellsOff;
     uint32_t internalMemOff;

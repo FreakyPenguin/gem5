@@ -35,6 +35,8 @@
 #include <limits>
 #include <string>
 
+#include <dlfcn.h>
+
 #include "base/compiler.hh"
 #include "base/debug.hh"
 #include "base/inet.hh"
@@ -58,7 +60,10 @@ namespace FlexNIC {
 // Sinic PCI Device
 //
 Device::Device(const Params *p)
-    : EtherDevBase(p), interface(0), doorbellsNum(p->doorbell_num),
+    : EtherDevBase(p), interface(0),
+      pcfgPath(p->pipeline_config), pcfgHandle(0),
+      pcfgFunRx(0), pcfgFunTx(0), pcfgFunDb(0), pcfgFunDma(0),
+      doorbellsNum(p->doorbell_num),
       doorbellsOff(0x1000),
       internalMemOff(0x1000 * (1 + p->doorbell_num)),
       internalMemSize(p->internal_memory),
@@ -70,12 +75,26 @@ Device::Device(const Params *p)
       pioMemWriteDelay(p->pio_memwrite_delay)
 {
     interface = new Interface(name() + ".int0", this);
-    //reset();
+
+    pcfgHandle = dlopen(pcfgPath.c_str(), RTLD_NOW);
+    if (!pcfgHandle) {
+      panic("flexnic: dlopen of pipeline config (%s) failed (%s)\n",
+          pcfgPath.c_str(), dlerror());
+    }
+    pcfgFunRx = (PipelineFun) dlsym(pcfgHandle, "pipeline_rx");
+    pcfgFunTx = (PipelineFun) dlsym(pcfgHandle, "pipeline_tx");
+    pcfgFunDb = (PipelineFun) dlsym(pcfgHandle, "pipeline_db");
+    pcfgFunDma = (PipelineFun) dlsym(pcfgHandle, "pipeline_dma");
+    if (!pcfgFunRx || !pcfgFunTx || !pcfgFunDb || !pcfgFunDma) {
+      panic("flexnic: loading pipeline function (rx=%p tx=%p db=%p dma=%p)\n",
+          pcfgFunRx, pcfgFunTx, pcfgFunDb, pcfgFunDma);
+    }
 }
 
 Device::~Device()
 {
   delete[] internalMem;
+  dlclose(pcfgHandle);
 }
 
 

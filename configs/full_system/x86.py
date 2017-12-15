@@ -33,7 +33,7 @@ from m5.objects import *
 class ExtendedPc(Pc):
     ethernet = FlexNIC(pci_bus=0, pci_dev=2, pci_func=0,
                 InterruptLine=15, InterruptPin=1,
-                BAR0 = 0xC0000000)
+                BAR0 = 0xC0000000, pipeline_config='software/pipelines.so')
 
     def attachIO(self, bus, dma_ports = []):
         super(ExtendedPc, self).attachIO(bus, dma_ports)

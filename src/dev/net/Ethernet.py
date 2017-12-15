@@ -279,6 +279,8 @@ class FlexNIC(EtherDevBase):
     cxx_class = 'FlexNIC::Device'
     cxx_header = "dev/net/flexnic.hh"
 
+    pipeline_config = Param.String('', "Path to configuration")
+
     doorbell_num = Param.UInt16(32, "Number of doorbells")
     internal_memory = Param.MemorySize('1MB', "Internal NIC memory size")
 
