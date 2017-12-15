@@ -1,0 +1,6 @@
+#!/bin/bash
+lspci -nv
+echo '4242 4242' > /sys/bus/pci/drivers/uio_pci_generic/new_id
+tar xf /dev/hdb
+./test_driver
+/sbin/m5 exit
